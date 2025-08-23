@@ -1,8 +1,9 @@
 // src/pages/Checkout.jsx
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useCart } from "../store/CartContext";
 import { formatPrice } from "../utils/formatPrice";
+import Toast from "../components/Toast"; // ✅ import the toast
 
 const initial = {
   fullName: "",
@@ -18,11 +19,16 @@ const initial = {
 };
 
 export default function Checkout() {
-  const navigate = useNavigate();
   const { items, subtotal, clear } = useCart();
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState({});
-  const [submitted, setSubmitted] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+
+  // success + toast
+  const [success, setSuccess] = useState(false);
+  const [paidTotal, setPaidTotal] = useState(null);
+  const [orderId, setOrderId] = useState(null);
+  const [toast, setToast] = useState(null);
 
   const isEmpty = !Array.isArray(items) || items.length === 0;
   const total = useMemo(() => subtotal, [subtotal]);
@@ -30,16 +36,11 @@ export default function Checkout() {
   const onChange = (e) => {
     const { name, value } = e.target;
     setValues((v) => ({ ...v, [name]: value }));
-    // clear error as user types
-    if (errors[name]) {
-      setErrors((er) => ({ ...er, [name]: undefined }));
-    }
+    if (errors[name]) setErrors((er) => ({ ...er, [name]: undefined }));
   };
 
   const validate = () => {
     const er = {};
-
-    // basic rules (simple and robust)
     if (!values.fullName.trim()) er.fullName = "Full name is required.";
     if (!/^\S+@\S+\.\S+$/.test(values.email)) er.email = "Enter a valid email.";
 
@@ -51,8 +52,7 @@ export default function Checkout() {
     const digits = values.cardNumber.replace(/\s+/g, "");
     if (!/^\d{13,19}$/.test(digits)) er.cardNumber = "Enter a valid card number (digits only).";
     if (!values.cardName.trim()) er.cardName = "Name on card is required.";
-    if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(values.expiry))
-      er.expiry = "Use MM/YY format.";
+    if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(values.expiry)) er.expiry = "Use MM/YY format.";
     if (!/^\d{3,4}$/.test(values.cvv)) er.cvv = "3–4 digit CVV.";
 
     setErrors(er);
@@ -61,15 +61,42 @@ export default function Checkout() {
 
   const onSubmit = (e) => {
     e.preventDefault();
-    setSubmitted(true);
+    setAttempted(true);
     if (!validate()) return;
 
     // Fake order placement
+    setPaidTotal(total);
+    setOrderId(`ORD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`);
     clear();
-    navigate("/shop");
-    alert("Order placed! (dummy payment)");
+    setSuccess(true);
+    setToast("✅ Order placed successfully!");
   };
 
+  // Success screen
+  if (success) {
+    return (
+      <section className="container">
+        <h1>✅ Order Placed Successfully!</h1>
+        <p className="product-desc">Thank you for your purchase. We’ve received your order.</p>
+
+        <div className="footer-card" style={{ marginTop: 12 }}>
+          <h3 className="footer-title">Order Summary</h3>
+          <p className="footer-text">
+            <strong>Order ID:</strong> {orderId}<br />
+            <strong>Amount Paid:</strong> {paidTotal !== null ? formatPrice(paidTotal) : formatPrice(0)}
+          </p>
+        </div>
+
+        <Link to="/shop" className="btn" style={{ marginTop: 14 }}>
+          Continue Shopping →
+        </Link>
+
+        {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      </section>
+    );
+  }
+
+  // Empty cart state
   if (isEmpty) {
     return (
       <section className="container">
@@ -273,12 +300,14 @@ export default function Checkout() {
             <button type="submit" className="btn" aria-label="Place order">
               Place Order
             </button>
-            <Link to="/cart" className="btn outline" aria-label="Back to cart">Back to Cart</Link>
+            <Link to="/cart" className="btn outline" aria-label="Back to cart">
+              Back to Cart
+            </Link>
           </div>
 
           {/* global form announcement (a11y) */}
           <div aria-live="polite" style={{ height: 1, overflow: "hidden" }}>
-            {submitted && Object.keys(errors).length > 0 ? "Please fix the highlighted fields." : ""}
+            {attempted && Object.keys(errors).length > 0 ? "Please fix the highlighted fields." : ""}
           </div>
         </form>
 
@@ -298,6 +327,9 @@ export default function Checkout() {
           </div>
         </aside>
       </div>
+
+      {/* toast lives at page level so it shows on both form & success screen */}
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </section>
   );
 }
